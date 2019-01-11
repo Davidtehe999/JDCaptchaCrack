@@ -10,6 +10,7 @@ import time, random, datetime, os
 import math
 from functools import reduce
 import operator
+import sys
 
 
 class JD(object):
@@ -38,7 +39,7 @@ class JD(object):
                                    chrome_options=chrome_options)
                                    '''
 
-        self.dr = webdriver.Chrome(executable_path=("./chromedriver_linux"),
+        self.dr = webdriver.Chrome(executable_path=("./chromedriver"),
                                    chrome_options=chrome_options)
         self.dr.maximize_window();
         self.step = step;
@@ -288,30 +289,108 @@ class JD(object):
         return page_snap_obj;
 
     def autoSign(self):
-	#登陆jd后自动签到
+    #登陆jd后自动签到
         self.dr.implicitly_wait(8)
+        handle_org = self.dr.current_window_handle
+        print("京东会员:", handle_org)
         signState = self.dr.find_element_by_css_selector\
             ("div.floor-vip > div.w.clearfix > div.user-welfare "
              "> div.welfare-content.clearfix > a.sign-in >span.name").text
         if signState == "已签到":
+            signSubmit = self.dr.find_element_by_class_name("icon-sign")
+            signSubmit.click()
             print("今日已经签到")
         else:
             signSubmit = self.dr.find_element_by_class_name("icon-sign")
             signSubmit.click()
             print("签到成功")
+        handle_all = self.dr.window_handles
+        print("京东会员+签到页",handle_all)
+
+    def autoSignShop(self):
+        #进入活动店铺签到
+        time.sleep(0.99)
+        buttonHover = self.dr.find_element_by_link_text("我的京东")
+        ActionChains(self.dr).move_to_element(buttonHover).perform()
+        time.sleep(1.5)
+        myBean = self.dr.find_element_by_link_text("我的京豆")
+        time.sleep(1)
+        myBean.click()
+        self.dr.implicitly_wait(8)
+        time.sleep(5)
+        handle_all_2 = self.dr.window_handles
+        print("京东会员 签到页 我的京东：",handle_all_2)
+
+        #打开了新选项卡，让webdriver读取新选项卡内容,handle_org是京东会员，handle_1是签到页，handle_2是我的京豆
+        handle_org = self.dr.current_window_handle
+        handle_1 = self.dr.window_handles[1]
+        handle_2 = self.dr.window_handles[2]
+        #webdriver获取handle_2 我的京豆 内容
+        self.dr.switch_to.window(handle_2)
 
 
-# 参数1：1=下载素材，2=开始合并素材，3=开始登录
-# 参数2：是否启用chrome headless 模式、True为无头，False为有浏览器
-# 参数3：登录滑块素材下载个数
-jd = JD(3, True, 10);
+        #9个活动商铺表格，有6个隐藏，把表格的隐藏属性关闭
+        i = 3
+        while i < 9:
+            js = "document.getElementsByClassName('bean-shop-list')[0].children[" + str(i) + "].style.display=''"
+            self.dr.execute_script(js)
+            i += 1
 
-#参数1：登陆jd的网页
-#参数2：用户名
-#参数3：密码
-jd.autologin("http://vip.jd.com/home.html", "username", "password")
-jd.autoSign()
+        #定位所有活动店铺
 
-#登陆完成后，退出webdriver
-time.sleep(3)
-jd.dr.quit()
+        earnBean = self.dr.find_elements_by_link_text("去签到")
+        if earnBean == []:
+            print("今日店铺签到完毕")
+        else:
+
+            #新打开的标签页
+            handle_num = 3 #第0个选项卡是登陆，第1个选项卡是我的京东，第二个是签到页，从第3个开始以后的选项卡是进入活动店铺
+            for each_shop in earnBean:
+                self.dr.switch_to.window(handle_2)
+                time.sleep(0.7)
+                each_shop.click()
+                self.dr.implicitly_wait(3)
+                handle_new = self.dr.window_handles[handle_num]
+                self.dr.switch_to.window(handle_new)
+                time.sleep(2)
+                shop_sign = self.dr.find_element_by_class_name("jSign").text
+                if shop_sign != "签到":
+                    print("店铺" + str(handle_num-2) + "已经签到")
+                else:
+                    try:
+                        J_giftModal = self.dr.find_element_by_class_name("J_giftClose")
+                        J_giftModal.click()
+                        getNewBean = self.dr.find_element_by_link_text("签到")
+                        getNewBean.click()
+                        print("店铺" + str(handle_num - 1) + "签到成功")
+                        time.sleep(3.8)
+                    except:
+                        getNewBean = self.dr.find_element_by_link_text("签到")
+                        getNewBean.click()
+                        print("店铺" + str(handle_num-2) + "签到成功")
+                        time.sleep(3.8)
+                handle_num += 1
+
+
+
+if(__name__=="__main__"):
+    # 参数1：1=下载素材，2=开始合并素材，3=开始登录
+    # 参数2：是否启用chrome headless 模式、True为无头，False为有浏览器
+    # 参数3：登录滑块素材下载个数
+    jd = JD(3, False, 10);
+    #参数1：登陆jd的网页
+    #参数2：用户名
+    #参数3：密码
+    while(1):
+        try:
+            jd.autologin("http://vip.jd.com/home.html", "userName", "passWord")
+            jd.autoSign()
+            jd.autoSignShop()
+
+    #登陆完成后，退出webdriver
+            time.sleep(3)
+            jd.dr.quit()
+            break
+        except:
+            print(sys.exc_info())
+
