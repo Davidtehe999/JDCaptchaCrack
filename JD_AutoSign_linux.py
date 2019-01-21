@@ -10,13 +10,13 @@ import time, random, datetime, os
 import math
 from functools import reduce
 import operator
+import json
 import sys
 
 
-class JD(object):
+class JD():
 
-    def __init__(self, step, is_headless, down_img_count,
-                 img_dir="./images/jd/"):
+    def __init__(self, step, is_headless, down_img_count, username, password, url, img_dir="./images/jd/"):
         # 设置
         chrome_options = Options()
 
@@ -29,9 +29,8 @@ class JD(object):
             chrome_options.add_argument('--disable-gpu')
             # 设置屏幕器宽高
             chrome_options.add_argument("--window-size=1440,750")
-            #设置沙盒模式，在无gui的环境中非常重要！！！！
-            #chrome_options.add_argument("--no-sandbox");
-       
+            # 设置沙盒模式，在无gui的环境中非常重要！！！！
+            chrome_options.add_argument("--no-sandbox");
 
         '''
         self.dr = webdriver.Chrome(
@@ -42,10 +41,13 @@ class JD(object):
         self.dr = webdriver.Chrome(executable_path=("./chromedriver"),
                                    chrome_options=chrome_options)
         self.dr.maximize_window();
-        self.step = step;
+        self.step = step
         self.img_dir = img_dir
-        self.down_dir = "./images/jd4/";
-        self.down_img_count = down_img_count;
+        self.down_dir = "./images/jd4/"
+        self.down_img_count = down_img_count
+        self.username = username
+        self.password = password
+        self.url = url
 
     def is_pixel_equal(self, img1, img2, x, y):
         """
@@ -95,15 +97,15 @@ class JD(object):
         # 减速阈值
         mid = distance * 4 / 5
         # 时间间隔
-        t = 0.5 #0.2
+        t = 0.5  # 0.2
         # 初始速度
         v = 0
 
         while current < distance:
             if current < mid:
-                a = random.uniform(0.1, 5) #2,5
+                a = random.uniform(0.1, 5)  # 2,5
             else:
-                a = -(random.uniform(10, 14))#12.5,13.5
+                a = -(random.uniform(10, 14))  # 12.5,13.5
             v0 = v
             v = v0 + a * t
             x = v0 * t + 1 / 2 * a * t * t
@@ -143,7 +145,7 @@ class JD(object):
             / len(histogram1))
         return differ / 100
 
-    def autologin(self, url, username, password):
+    def autologin(self):
         """
         自动登录
         :param image1: 图片1
@@ -153,30 +155,36 @@ class JD(object):
         :return: 像素是否相同
         """
         print('开始时间', datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f'))
-        self.dr.get(url)
+        self.dr.get(self.url)
         self.dr.implicitly_wait(4)
 
         lotab = self.dr.find_elements_by_class_name("login-tab-r")
-        lotab[0].click();
-        time.sleep(1);
-        name = self.dr.find_element_by_id("loginname");
-        name.send_keys(username);
-        time.sleep(1);
-        pwd = self.dr.find_element_by_id("nloginpwd");
-        pwd.send_keys(password);
-        time.sleep(1.3);
+        lotab[0].click()
+        time.sleep(1)
+        name = self.dr.find_element_by_id("loginname")
+        name.send_keys(self.username)
+        time.sleep(1)
+        pwd = self.dr.find_element_by_id("nloginpwd")
+        pwd.send_keys(self.password)
+        time.sleep(1.3)
         logbtn = self.dr.find_element_by_id("loginsubmit")
-        logbtn.click();
+        logbtn.click()
 
-        slide = self.dr.find_element_by_class_name("JDJRV-suspend-slide");
+        slide = self.dr.find_element_by_class_name("JDJRV-suspend-slide")
         if slide:
-            print("进入滑块验证码流程");
+            print("进入滑块验证码流程")
             if self.step == 1:
-                print("第一次登录，开始下载素材：");
+                print("第一次登录，开始下载素材：")
                 for i in range(self.down_img_count - 1):
                     # self.get_images(r"D:/learn/python3.6/PythonTest/spiders/images/jd/1542264153.554946.png");
-                    self.get_images();
+                    self.get_images()
             elif self.step == 2:
+                '''
+                在step1后，需要通过肉眼分析把jd的验证图挑出来，本方法用的是将验证图
+                均分为上下两个部分，分别手动在./images/jd3/里面命名1u.png,1d.png，
+                再将1u的上半部分和1d的下半部分合并，得到一张完整的验证图，保存在
+                ./images/jd4/
+                '''
                 print("已下载过素材,合并素材：");
                 img_path = "./images/jd3/";
                 i = 1;
@@ -190,25 +198,45 @@ class JD(object):
                         imgd.paste(img_temp, (0, 0));
                         imgd.save(self.down_dir + str(i) + "m.png");
                         print("合并第" + str(i) + "张")
-                    i = i + 1;
+                    i = i + 1
             elif self.step == 3:
-                print("已有素材,开始登录：");
+
+                print("已有素材,开始登录：")
                 if slide:
                     for i in range(50):
-                        self.do_login();
-                        time.sleep(1.7);
-                        title = self.dr.title;
+                        self.do_login()
+                        time.sleep(1.7)
+                        title = self.dr.title
                         if title == "京东-欢迎登录":
-                            continue;
+                            continue
                         else:
-                            print("登录成功：" + title);
-                            break;
+                            print("登录成功：" + title)
+                            self.get_cookie()
+                            break
                 else:
-                    time.sleep(1.2);
-                    logbtn.click();
+                    time.sleep(1.2)
+                    logbtn.click()
 
         print('结束时间', datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f'))
         pass
+
+    def get_cookie(self):
+        #得到cookie，并保存在txt中
+        cookies = self.dr.get_cookies()
+        cookies = json.dumps(cookies)
+        with open("./jd_" + str(self.username) + "_cookies.txt" , "w") as f:
+            f.write(cookies)
+        print("保存cookies成功")
+
+    def login_with_cookie(self):
+        #使用保存的cookies登陆
+        cookies = open("./jd_" + str(self.username) + "_cookies.txt").read()
+        cookies = json.loads(cookies)
+
+        for i in cookies:
+            self.dr.add_cookie(i)
+        self.dr.refresh()
+
 
     def do_login(self):
         curent_img = self.get_images();
@@ -227,8 +255,8 @@ class JD(object):
         gap = self.get_gap(image1, curent_img);
         print("gap:", gap);
 
-        track = self.get_track7(gap + 28);#20.85
-        print("#"*20, track)
+        track = self.get_track7(gap + 28);  # 20.85
+        print("#" * 20, track)
         self.dragging(track);
         pass
 
@@ -289,11 +317,11 @@ class JD(object):
         return page_snap_obj;
 
     def autoSign(self):
-    #登陆jd后自动签到
+        # 登陆jd后自动签到
         self.dr.implicitly_wait(8)
         handle_org = self.dr.current_window_handle
         print("京东会员:", handle_org)
-        signState = self.dr.find_element_by_css_selector\
+        signState = self.dr.find_element_by_css_selector \
             ("div.floor-vip > div.w.clearfix > div.user-welfare "
              "> div.welfare-content.clearfix > a.sign-in >span.name").text
         if signState == "已签到":
@@ -305,10 +333,10 @@ class JD(object):
             signSubmit.click()
             print("签到成功")
         handle_all = self.dr.window_handles
-        print("京东会员+签到页",handle_all)
+        print("京东会员+签到页", handle_all)
 
     def autoSignShop(self):
-        #进入活动店铺签到
+        # 进入活动店铺签到
         time.sleep(0.99)
         buttonHover = self.dr.find_element_by_link_text("我的京东")
         ActionChains(self.dr).move_to_element(buttonHover).perform()
@@ -319,32 +347,32 @@ class JD(object):
         self.dr.implicitly_wait(8)
         time.sleep(5)
         handle_all_2 = self.dr.window_handles
-        print("京东会员 签到页 我的京东：",handle_all_2)
+        print("京东会员 签到页 我的京东：", handle_all_2)
 
-        #打开了新选项卡，让webdriver读取新选项卡内容,handle_org是京东会员，handle_1是签到页，handle_2是我的京豆
+        # 打开了新选项卡，让webdriver读取新选项卡内容,handle_org是京东会员，handle_1是签到页，handle_2是我的京豆
         handle_org = self.dr.current_window_handle
         handle_1 = self.dr.window_handles[1]
         handle_2 = self.dr.window_handles[2]
-        #webdriver获取handle_2 我的京豆 内容
+        # webdriver获取handle_2 我的京豆 内容
         self.dr.switch_to.window(handle_2)
 
-
-        #9个活动商铺表格，有6个隐藏，把表格的隐藏属性关闭
+        # 9个活动商铺表格，有6个隐藏，把表格的隐藏属性关闭
         i = 3
         while i < 9:
             js = "document.getElementsByClassName('bean-shop-list')[0].children[" + str(i) + "].style.display=''"
             self.dr.execute_script(js)
             i += 1
 
-        #定位所有活动店铺
+        # 定位所有活动店铺
 
         earnBean = self.dr.find_elements_by_link_text("去签到")
         if earnBean == []:
             print("今日店铺签到完毕")
+            print(earnBean)
         else:
 
-            #新打开的标签页
-            handle_num = 3 #第0个选项卡是登陆，第1个选项卡是我的京东，第二个是签到页，从第3个开始以后的选项卡是进入活动店铺
+            # 新打开的标签页
+            handle_num = 3  # 第0个选项卡是登陆，第1个选项卡是我的京东，第二个是签到页，从第3个开始以后的选项卡是进入活动店铺
             for each_shop in earnBean:
                 self.dr.switch_to.window(handle_2)
                 time.sleep(0.7)
@@ -355,7 +383,7 @@ class JD(object):
                 time.sleep(2)
                 shop_sign = self.dr.find_element_by_class_name("jSign").text
                 if shop_sign != "签到":
-                    print("店铺" + str(handle_num-2) + "已经签到")
+                    print("店铺" + str(handle_num - 2) + "已经签到")
                 else:
                     try:
                         J_giftModal = self.dr.find_element_by_class_name("J_giftClose")
@@ -367,30 +395,28 @@ class JD(object):
                     except:
                         getNewBean = self.dr.find_element_by_link_text("签到")
                         getNewBean.click()
-                        print("店铺" + str(handle_num-2) + "签到成功")
+                        print("店铺" + str(handle_num - 2) + "签到成功")
                         time.sleep(3.8)
                 handle_num += 1
 
 
-
-if(__name__=="__main__"):
+if (__name__ == "__main__"):
     # 参数1：1=下载素材，2=开始合并素材，3=开始登录
     # 参数2：是否启用chrome headless 模式、True为无头，False为有浏览器
     # 参数3：登录滑块素材下载个数
-    jd = JD(3, False, 10);
-    #参数1：登陆jd的网页
-    #参数2：用户名
-    #参数3：密码
-    while(1):
+    # 参数4：用户名
+    # 参数5：密码
+    # 参数6：网址
+    jd = JD(3, True, 50, "username", "password", "http://vip.jd.com/home.html")
+    while (1):
         try:
-            jd.autologin("http://vip.jd.com/home.html", "userName", "passWord")
+            jd.autologin()
             jd.autoSign()
             jd.autoSignShop()
 
-    #登陆完成后，退出webdriver
+            # 登陆完成后，退出webdriver
             time.sleep(3)
             jd.dr.quit()
             break
         except:
             print(sys.exc_info())
-
